@@ -1,41 +1,136 @@
-# Baidu Text Translation API
+# Trans CLI
 
-This repository contains an example implementation of a text translation tool using Baidu's translation API. The script demonstrates how to translate text from English to Simplified Chinese using Rust.
-
-## Requirements
-
-- Rust programming language (install using [rustup](https://rustup.rs/))
+A command-line translation tool using Baidu Translation API, written in Rust.
 
 ## Features
 
-- Translate text from English to Simplified Chinese.
-- Demonstrates the usage of Baidu's translation API using Rust.
+- Fast and reliable text translation
+- Support for multiple languages
+- Automatic language detection
+- Simple CLI interface
+- Secure credential management
 
-## Setup
+## Installation
 
-1. Set up your own Baidu API credentials:
-   - Replace `INPUT_YOUR_APPID` in the script with your App ID.
-   - Replace `INPUT_YOUR_APPKEY` in the script with your App Key.
-
-2. Install necessary dependencies using `cargo`:
+1. Clone this repository
+2. Build the project:
    ```bash
-   cargo build
+   cargo build --release
    ```
+
+## Configuration
+
+1. Get your API credentials from [Baidu Fanyi API](https://fanyi-api.baidu.com/)
+2. Run the tool once to generate config file:
+   ```bash
+   cargo run -- "hello world"
+   ```
+3. Edit the config file with your credentials:
+   ```bash
+   # Show config file location
+   cargo run -- --config
+   ```
+
+The config file should look like:
+```toml
+appid = "your_app_id"
+appkey = "your_app_key"
+```
 
 ## Usage
 
-Run the Rust program:
-
+### Basic translation
 ```bash
-cargo run
+# Translate to Chinese (default)
+cargo run -- "Hello World"
+
+# Translate from English to Spanish
+cargo run -- "Hello World" --from en --to es
+
+# Auto-detect source language
+cargo run -- "你好世界" --to en
 ```
 
-## API Documentation
+### Language Codes
 
-For more information about the API, refer to the official Baidu documentation:
-[https://api.fanyi.baidu.com/doc/21](https://api.fanyi.baidu.com/doc/21).
+Common language codes:
+- `auto` - Auto-detect (default for source)
+- `en` - English
+- `zh` - Chinese (Simplified)
+- `zh-tw` - Chinese (Traditional)
+- `es` - Spanish
+- `fr` - French
+- `de` - German
+- `ja` - Japanese
+- `ko` - Korean
+- `ru` - Russian
+
+For complete list, refer to [Baidu API documentation](https://api.fanyi.baidu.com/doc/21).
+
+### Command Options
+
+```bash
+trans-cli [OPTIONS] <TEXT>
+
+Arguments:
+  <TEXT>  Text to translate
+
+Options:
+  -f, --from <LANG>  Source language code (default: auto)
+  -t, --to <LANG>    Target language code (default: zh)
+      --config       Show config file path and exit
+  -h, --help         Print help
+  -V, --version      Print version
+```
+
+## Examples
+
+```bash
+# English to Chinese
+cargo run -- "Hello, how are you?"
+
+# Chinese to English
+cargo run -- "你好吗？" --to en
+
+# Auto-detect to Spanish
+cargo run -- "Good morning" --to es
+
+# Japanese to English
+cargo run -- "おはよう" --from ja --to en
+```
+
+## Error Handling
+
+The tool provides clear error messages for common issues:
+- Missing or invalid API credentials
+- Network connectivity problems
+- API rate limiting
+- Unsupported language codes
+
+## Development
+
+### Building
+```bash
+cargo build
+```
+
+### Running tests
+```bash
+cargo test
+```
+
+### Release build
+```bash
+cargo build --release
+```
 
 ## License
 
-This project is open-source and available under the MIT License.
+This project is open source. Please refer to the LICENSE file for details.
 
+## API Reference
+
+This tool uses the Baidu Translation API. For more information:
+- [API Documentation](https://api.fanyi.baidu.com/doc/21)
+- [Language Codes](https://api.fanyi.baidu.com/doc/21)
+- [Error Codes](https://api.fanyi.baidu.com/doc/21)

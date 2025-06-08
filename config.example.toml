@@ -1,0 +1,19 @@
+# Example Configuration for Trans CLI
+# Copy this to ~/.config/trans-cli/config.toml and edit with your credentials
+
+# Baidu Translation API Configuration
+# Get your credentials from: https://fanyi-api.baidu.com/
+# 
+# Steps to get API credentials:
+# 1. Visit https://fanyi-api.baidu.com/
+# 2. Register for a developer account
+# 3. Create a new application
+# 4. Get your APP ID and APP KEY
+# 5. Replace the values below
+
+appid = "YOUR_ACTUAL_APP_ID_HERE"
+appkey = "YOUR_ACTUAL_APP_KEY_HERE"
+
+# Example:
+# appid = "20231201001234567"
+# appkey = "abcdef1234567890abcdef1234567890"
