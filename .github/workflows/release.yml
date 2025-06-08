@@ -1,0 +1,223 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+            target: x86_64-unknown-linux-gnu
+            binary-suffix: ''
+            artifact-name: trans-cli-linux-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary-suffix: ''
+            artifact-name: trans-cli-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary-suffix: '.exe'
+            artifact-name: trans-cli-windows-x86_64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+          profile: minimal
+
+      - name: Cache cargo registry 
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-target-
+
+      - name: Build release binaries
+        run: |
+          cargo build --release --target ${{ matrix.target }} --bin trans-cli
+
+      - name: Create artifact directory
+        run: mkdir -p artifacts
+
+      - name: Copy binaries to artifacts (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cp target/${{ matrix.target }}/release/trans-cli${{ matrix.binary-suffix }} artifacts/trans-cli${{ matrix.binary-suffix }}
+
+      - name: Copy binaries to artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          copy target\${{ matrix.target }}\release\trans-cli${{ matrix.binary-suffix }} artifacts\trans-cli${{ matrix.binary-suffix }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: artifacts/
+
+
+  release:
+    name: Create GitHub Release
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create release archives
+        run: |
+          # Create tar.gz for Linux and macOS
+          for dir in trans-cli-linux-* trans-cli-macos-*; do
+            if [ -d "$dir" ]; then
+              cd "$dir"
+              tar -czf "../$dir.tar.gz" trans-cli 
+              cd ..
+            fi
+          done
+          
+          # Create zip for Windows
+          for dir in trans-cli-windows-*; do
+            if [ -d "$dir" ]; then
+              cd "$dir"
+              zip -r "../$dir.zip" trans-cli.exe
+              cd ..
+            fi
+          done
+
+      - name: Get tag name
+        id: tag_name
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Get previous tag
+        id: previoustag
+        run: |
+          echo "PREVIOUS_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo '')" >> $GITHUB_ENV
+          echo "CURRENT_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Generate release notes
+        id: generate_notes
+        run: |
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+            echo "## Changes since $PREVIOUS_TAG" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            git log --pretty=format:"* %s (%an) [%h](https://github.com/${{ github.repository }}/commit/%H)" $PREVIOUS_TAG..$CURRENT_TAG >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "## Binaries" >> $GITHUB_ENV
+            echo "Each archive contains the following binaries:" >> $GITHUB_ENV
+            echo "- \`trans-cli\`: Main CLI application for translation with TTS support" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "## Available Downloads" >> $GITHUB_ENV
+            echo "- \`trans-cli-linux-x86_64.tar.gz\`: Linux x86_64 binary" >> $GITHUB_ENV
+            echo "- \`trans-cli-macos-aarch64.tar.gz\`: macOS Apple Silicon binary" >> $GITHUB_ENV
+            echo "- \`trans-cli-windows-x86_64.zip\`: Windows x86_64 binary" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "## Usage" >> $GITHUB_ENV
+            echo "### Linux/macOS" >> $GITHUB_ENV
+            echo "\`\`\`bash" >> $GITHUB_ENV
+            echo "# Extract the archive" >> $GITHUB_ENV
+            echo "tar -xzf trans-cli-<platform>.tar.gz" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "# Run the translation CLI" >> $GITHUB_ENV
+            echo "./trans-cli [OPTIONS]" >> $GITHUB_ENV
+            echo "\`\`\`" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "### Windows" >> $GITHUB_ENV
+            echo "\`\`\`cmd" >> $GITHUB_ENV
+            echo "REM Extract the archive" >> $GITHUB_ENV
+            echo "unzip trans-cli-windows-x86_64.zip" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "REM Run the translation CLI" >> $GITHUB_ENV
+            echo "trans-cli.exe [OPTIONS]" >> $GITHUB_ENV
+            echo "\`\`\`" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+            echo "## Initial Release" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            git log --pretty=format:"* %s (%an) [%h](https://github.com/${{ github.repository }}/commit/%H)" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "## Binaries" >> $GITHUB_ENV
+            echo "Each archive contains the following binaries:" >> $GITHUB_ENV
+            echo "- \`trans-cli\`: Main CLI application for translation with TTS support" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "## Available Downloads" >> $GITHUB_ENV
+            echo "- \`trans-cli-linux-x86_64.tar.gz\`: Linux x86_64 binary" >> $GITHUB_ENV
+            echo "- \`trans-cli-macos-aarch64.tar.gz\`: macOS Apple Silicon binary" >> $GITHUB_ENV
+            echo "- \`trans-cli-windows-x86_64.zip\`: Windows x86_64 binary" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "## Usage" >> $GITHUB_ENV
+            echo "### Linux/macOS" >> $GITHUB_ENV
+            echo "\`\`\`bash" >> $GITHUB_ENV
+            echo "# Extract the archive" >> $GITHUB_ENV
+            echo "tar -xzf trans-cli-<platform>.tar.gz" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "# Run the translation CLI" >> $GITHUB_ENV
+            echo "./trans-cli [OPTIONS]" >> $GITHUB_ENV
+            echo "\`\`\`" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "### Windows" >> $GITHUB_ENV
+            echo "\`\`\`cmd" >> $GITHUB_ENV
+            echo "REM Extract the archive" >> $GITHUB_ENV
+            echo "unzip trans-cli-windows-x86_64.zip" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "REM Run the translation CLI" >> $GITHUB_ENV
+            echo "trans-cli.exe [OPTIONS]" >> $GITHUB_ENV
+            echo "\`\`\`" >> $GITHUB_ENV
+            echo "" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_name.outputs.TAG_NAME }}
+          name: Release ${{ steps.tag_name.outputs.TAG_NAME }}
+          body: ${{ env.RELEASE_NOTES }}
+          files: |
+            trans-cli-linux-x86_64.tar.gz
+            trans-cli-macos-aarch64.tar.gz
+            trans-cli-windows-x86_64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
